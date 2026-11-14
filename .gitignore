@@ -1,0 +1,24 @@
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build/
+/captures/
+.externalNativeBuild/
+.cxx/
+app/build/
+*.apk
+*.zip
+*.jks
+*.keystore
+.kotlin/
+**/build/
+
+# The go-ios binary is produced by the GitHub Actions workflow (or
+# scripts/build-goios.sh) and must not be committed.
+app/src/main/jniLibs/
+
+# Local go-ios checkout created by scripts/build-goios.sh
+third_party/
+/dist/
