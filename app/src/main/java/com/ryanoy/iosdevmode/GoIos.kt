@@ -63,7 +63,7 @@ object GoIos {
                         put("TMP", context.cacheDir.absolutePath)
                         put("USBMUXD_SOCKET_ADDRESS", DEFAULT_MUX_SOCKET)
                         put("PATH", "/system/bin:/system/xbin:/vendor/bin")
-                        put("LANG", "C.UTF-8")
+                        put("LANG", "en_US.UTF-8")
                     }
                 }
                 .start()

@@ -62,8 +62,9 @@ class UsbMuxDaemon(
     }
 
     private fun acceptLoop() {
+        var ss: ServerSocket? = null
         try {
-            val ss = ServerSocket()
+            ss = ServerSocket()
             ss.reuseAddress = true
             ss.bind(InetSocketAddress(InetAddress.getByName("127.0.0.1"), PORT))
             server = ss
@@ -74,6 +75,11 @@ class UsbMuxDaemon(
             }
         } catch (t: Throwable) {
             if (running.get()) log("usbmuxd 服务异常: ${t.message}")
+        } finally {
+            // Always release the port, otherwise a later daemon start fails with
+            // "Address already in use" when stop() raced with bind().
+            try { ss?.close() } catch (_: Throwable) {}
+            if (server === ss) server = null
         }
     }
 

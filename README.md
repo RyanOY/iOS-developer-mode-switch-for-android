@@ -95,7 +95,7 @@ iPadOS 16 之后，`设置 → 隐私与安全性 → 开发者模式` 这个入
 | --- | --- |
 | ① 连接 iPad、配对并显示开发者模式开关 | 一把梭：USB → 配对 → `devmode reveal` |
 | ② 只显示开发者模式开关 | 已配对时单独执行 `devmode reveal` |
-| ③ 尝试直接开启（iPad 无锁屏密码时） | `devmode enable --enable-post-restart`；失败自动回退到 reveal |
+| ③ 尝试直接开启（iPad 无锁屏密码时） | `devmode enable`；失败自动回退到 reveal。开启成功后 iPad 会重启，本 App 不会等重启完成（重启后 Android 会收回 USB 授权），这是正常现象 |
 | ④ 查询状态 | `devmode get` |
 | 重置配对记录 | 删除 App 内的 PairRecord，重新配对（iPad 端可能仍认为已配对） |
 
@@ -131,6 +131,12 @@ iPadOS 16 之后，`设置 → 隐私与安全性 → 开发者模式` 这个入
 **6. 其他 App 占用 iPad**
 - 相册/文件传输类 App 可能抢占 USB 接口，先强制停止它们。
 
+**7. 点了“③ 尝试直接开启”，最后却提示失败，但 iPad 重启了**
+- 属正常：iPad 接受开启请求后会重启，Android 在重新枚举 USB 时收回授权，
+  go-ios 等不到设备就会报“not restarted in 60 seconds”。日志里只要出现
+  `Successfully enabled developer mode` / `device will restart` 就说明已经开启，
+  重启后到 `设置 → 隐私与安全性 → 开发者模式` 确认即可。
+
 ---
 
 ## 已知限制
@@ -138,9 +144,27 @@ iPadOS 16 之后，`设置 → 隐私与安全性 → 开发者模式` 这个入
 - 只支持 **arm64** 手机（go-ios 二进制只编了 arm64-v8a）；
 - `devmode get` 在部分 iPadOS 版本上需要先挂载开发者镜像，查询可能失败，
   不影响 reveal/enable 流程；
+- `devmode enable` 本身也会先查一次 `QueryDeveloperModeStatus`，某些 iPadOS
+  版本上这一步就会失败（日志里能看到 `failed checking developer mode status`），
+  此时按钮③ 不可用，请改用“②只显示开发者模式开关”再到 iPad 上手动打开；
+- iPad 设置了锁屏密码时，系统不允许 App 直接 enable，只能 reveal 后手动打开；
 - 设备重启后 USB 会重新枚举，Android 需要重新授权 USB；
 - 本工具做的是 Apple 官方允许的“开发者配对 + 开发者模式开关”，
   不是漏洞利用；但修改系统开发者设置请自行承担风险。
+
+---
+
+## 更新日志
+
+- **v1.0.1**
+  - 修正 USB 设备过滤里的 Apple vendor id（`0x05AC` = 1452，之前写成了 1404），
+    插上 iPad 时系统会正确提示“用本 App 打开”，自动授予 USB 权限；
+  - 按钮③ 去掉 `--enable-post-restart`（重启后 Android 会收回 USB 授权，这一步
+    在手机上永远等不到设备），改为从日志识别“已接受开启请求”；
+  - iPad 重启重新接入时，如果当前还有任务在跑，会在任务结束后自动继续；
+  - 修复 usbmuxd 在 stop/start 竞争时可能留下占用端口的问题；
+  - CI 增加 ELF 头校验，编译产物不是 aarch64 可执行文件时直接失败。
+- **v1.0.0** 首个版本：USB → usbmuxd 桥 → 配对 → AMFI reveal/enable。
 
 ---
 

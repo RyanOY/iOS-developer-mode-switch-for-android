@@ -62,6 +62,7 @@ class MainActivity : Activity() {
     private val ui = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor()
     private val busy = AtomicBoolean(false)
+    private val pendingAutoConnect = AtomicBoolean(false)
     private val logBuffer = StringBuilder()
     private val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.US)
 
@@ -84,6 +85,7 @@ class MainActivity : Activity() {
             when (intent.action) {
                 UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
                     log("检测到 USB 设备插入")
+                    if (busy.get()) pendingAutoConnect.set(true)
                     requestUsbPermission(autoStart = true)
                 }
                 UsbManager.ACTION_USB_DEVICE_DETACHED -> {
@@ -185,9 +187,10 @@ class MainActivity : Activity() {
 
     private fun runExclusive(label: String, block: () -> Unit) {
         if (!busy.compareAndSet(false, true)) {
-            log("“$label”正在进行中，请稍候…")
+            log("“$label”正在进行中，待当前任务结束后自动继续…")
             return
         }
+        pendingAutoConnect.set(false)
         setButtonsEnabled(false)
         worker.execute {
             try {
@@ -196,6 +199,10 @@ class MainActivity : Activity() {
                 log("$label 出错：${t.javaClass.simpleName}: ${t.message}")
             } finally {
                 busy.set(false)
+                if (pendingAutoConnect.compareAndSet(true, false)) {
+                    log("检测到 iPad 重新接入，自动继续…")
+                    ui.post { startConnectFlow() }
+                }
                 ui.post { setButtonsEnabled(true) }
             }
         }
@@ -404,18 +411,29 @@ class MainActivity : Activity() {
         runExclusive("开启开发者模式") {
             val udid = preparedDevice() ?: return@runExclusive
             log("使用 iPad: $udid")
-            log(">>> 尝试直接开启开发者模式（AMFI action 1，带 --enable-post-restart）")
+            log(">>> 尝试直接开启开发者模式（AMFI action 1）")
             log("注意：iPad 设置了锁屏密码时系统不允许这样直接开启，会自动退回“显示开关”。")
+            // No --enable-post-restart: after the reboot Android drops the USB
+            // permission, so the automatic post-restart step can never connect.
+            // We detect success from the log instead of relying on the exit code.
+            val output = StringBuilder()
             val result = GoIos.run(
                 this,
-                listOf("devmode", "enable", "--enable-post-restart"),
+                listOf("devmode", "enable"),
                 ENABLE_TIMEOUT_SECONDS
-            ) { line -> log(line) }
-            if (result.ok) {
-                log("开启成功，iPad 会重启。重启后请按屏幕提示确认开发者模式。")
-                setStatus("已开启\n重启后按 iPad 提示确认")
+            ) { line ->
+                output.append(line).append('\n')
+                log(line)
+            }
+            val text = output.toString()
+            val accepted = text.contains("Successfully enabled developer mode", ignoreCase = true) ||
+                text.contains("device will restart", ignoreCase = true)
+            if (result.ok || accepted) {
+                log("iPad 已接受“开启开发者模式”请求，设备会重启。")
+                log("重启后请按 iPad 屏幕提示确认；若没有提示，直接去 设置 → 隐私与安全性 → 开发者模式 查看开关。")
+                setStatus("已请求开启\n重启后按 iPad 提示确认")
             } else {
-                log("直接开启没有成功（有锁屏密码时属正常），改为显示开关…")
+                log("直接开启没有成功（有锁屏密码时属正常），改为显示“开发者模式”开关…")
                 revealInternal()
             }
         }

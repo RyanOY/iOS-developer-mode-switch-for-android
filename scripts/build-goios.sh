@@ -35,3 +35,12 @@ ls -lh "$OUT_DIR/libgoios.so"
 if command -v file >/dev/null 2>&1; then
   file "$OUT_DIR/libgoios.so"
 fi
+
+# Fail fast if the output is not a 64-bit little endian AArch64 ELF executable
+# (an accidental -buildmode=pie/shared build would not run on Android).
+OD_HEX="$(od -An -tx1 -N20 "$OUT_DIR/libgoios.so" | tr -d ' \n')"
+if [ "${OD_HEX:0:8}" != "7f454c46" ] || [ "${OD_HEX:8:2}" != "02" ] || [ "${OD_HEX:36:4}" != "b700" ]; then
+  echo "ERROR: libgoios.so is not an aarch64 ELF executable (header=$OD_HEX)" >&2
+  exit 1
+fi
+echo "ELF check ok: 64-bit LSB executable, ARM aarch64"

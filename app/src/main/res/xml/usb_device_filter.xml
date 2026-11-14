@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Apple Inc. USB vendor id 0x05AC == 1404 -->
-    <usb-device vendor-id="1404" />
+    <!-- Apple Inc. USB vendor id 0x05AC == 1452.
+         Lets the system offer to open this app (and grant USB permission)
+         as soon as an iPad/iPhone is plugged in. -->
+    <usb-device vendor-id="1452" />
 </resources>
