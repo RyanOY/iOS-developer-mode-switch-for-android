@@ -239,6 +239,14 @@ class MainActivity : Activity() {
         if (device == null) {
             setStatus("未检测到 iPad")
             log("未检测到 Apple USB 设备。请用支持数据传输的数据线/OTG/Hub 连接 iPad。")
+            val others = usbManager.deviceList.values.take(8)
+            if (others.isEmpty()) {
+                log("Android 目前没有枚举到任何 USB 设备：iPad 可能还没枚举完成、在锁屏休眠，或线只能充电。")
+            } else {
+                others.forEach { d ->
+                    log("当前 USB 设备：VID=0x${d.vendorId.toString(16)} PID=0x${d.productId.toString(16)} ${d.deviceName}")
+                }
+            }
             return
         }
         log(
@@ -386,13 +394,20 @@ class MainActivity : Activity() {
     private fun revealInternal() {
         log(">>> 请求 iPad 显示“开发者模式”开关（AMFI action 0）")
         setStatus("正在显示开发者模式开关…")
+        val output = StringBuilder()
         val result = GoIos.run(this, listOf("devmode", "reveal"), DEVMODE_TIMEOUT_SECONDS) { line ->
+            output.append(line).append('\n')
             log(line)
         }
+        val text = output.toString()
         if (result.ok) {
             log("已请求显示。接下来请在 iPad 上打开：设置 → 隐私与安全性 → 开发者模式")
-            log("打开后 iPad 会要求重启，重启后还需要用锁屏密码确认一次。")
+            log("打开后 iPad 会要求重启；重启后会弹窗要你用锁屏密码确认一次。")
             setStatus("开关已显示\n请到 iPad 设置→隐私与安全性→开发者模式")
+        } else if (text.contains("PasswordProtected", ignoreCase = true)) {
+            log("iPad 现在处于锁屏状态，系统拒绝 AMFI 服务（PasswordProtected）。")
+            log("请先解锁 iPad 并停在桌面，再点一次「② 只显示开发者模式开关」。")
+            setStatus("iPad 锁屏中\n解锁后再点②")
         } else {
             log("显示开关失败（exit=${result.exitCode}）。请确认 iPad 已解锁、已信任本机后重试。")
             setStatus("显示开关失败")
@@ -444,11 +459,31 @@ class MainActivity : Activity() {
             val udid = preparedDevice() ?: return@runExclusive
             log("使用 iPad: $udid")
             log(">>> 查询开发者模式状态")
+            val output = StringBuilder()
             val result = GoIos.run(this, listOf("devmode", "get"), DEVMODE_TIMEOUT_SECONDS) { line ->
+                output.append(line).append('\n')
                 log(line)
             }
-            if (!result.ok) {
-                log("查询失败。部分 iPadOS 版本在挂载开发者镜像前不支持该查询，可直接看设置里的开关。")
+            val text = output.toString()
+            val enabledTrue = text.contains("\"DeveloperModeEnabled\":true") ||
+                text.contains("\"DeveloperModeEnabled\": true")
+            val enabledFalse = text.contains("\"DeveloperModeEnabled\":false") ||
+                text.contains("\"DeveloperModeEnabled\": false")
+            when {
+                !result.ok -> {
+                    log("查询失败。部分 iPadOS 版本在挂载开发者镜像前不支持该查询，可直接看设置里的开关。")
+                    setStatus("查询失败\n直接看 iPad 设置里的开关")
+                }
+                enabledTrue -> {
+                    log("✅ 开发者模式已经开启（DeveloperModeEnabled = true）。")
+                    log("如果 iPad 刚重启过，在锁屏界面按提示用密码确认一次即可。")
+                    setStatus("开发者模式：已开启 ✅")
+                }
+                enabledFalse -> {
+                    log("开发者模式还没开启：请到 iPad 设置 → 隐私与安全性 → 开发者模式，打开开关。")
+                    setStatus("开发者模式：未开启\n到 iPad 设置里打开")
+                }
+                else -> setStatus("查询完成（结果见日志）")
             }
         }
     }
